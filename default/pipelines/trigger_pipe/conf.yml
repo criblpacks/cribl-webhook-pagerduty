@@ -1,0 +1,106 @@
+output: default
+groups: {}
+asyncFuncTimeout: 1000
+functions:
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: >-
+        See Settings tab -> README
+
+
+        Pipeline to send event trigger to PagerDuty based on internal metrics logs. 
+
+        - Author Jon Rust - Cribl <jrust@cribl.io>
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Drop any events we're not interested in
+  - id: drop
+    filter: "!((_metric == 'cribl.logstream.pq.queue_size') && (_value > 0) )"
+    disabled: null
+    conf: {}
+    final: true
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: >
+        Set up the info required per the PagerDuty docs: 
+
+
+        https://developer.pagerduty.com/docs/events-api-v2/trigger-events/
+
+
+        First we'll grab the token from the lookup file (regex match on the host field)
+
+        Then we set out the relevant fields from the docs above
+  - id: lookup
+    filter: "true"
+    disabled: null
+    conf:
+      matchMode: regex
+      matchType: first
+      reloadPeriodSec: 60
+      addToEvent: false
+      inFields:
+        - eventField: host
+          lookupField: host
+      ignoreCase: false
+      file: pagerduty_tokens.csv
+      outFields:
+        - lookupField: token
+          eventField: routing_key
+          defaultValue: "''"
+    description: Retrieve the integration token for PagerDuty from the CSV
+  - id: eval
+    filter: "true"
+    disabled: null
+    conf:
+      remove:
+        - "*"
+      add:
+        - name: event_action
+          value: "'trigger'"
+        - name: dedup_key
+          value: "`${host}-${output}`"
+        - name: payload
+          value: JSON.parse('{}')
+        - name: payload.severity
+          value: "'error'"
+        - name: payload.summary
+          value: "`Worker is queuing output=${output}`"
+        - name: payload.source
+          value: host
+        - name: payload.custom_details
+          value: 'JSON.parse(`{ "q_sz_bytes": ${_value} }`)'
+        - name: payload.timestamp
+          value: _time
+        - name: payload.component
+          value: "'LogStream Internal Queue'"
+      keep:
+        - routing_key
+        - event_action
+        - __sup_key
+        - payload*
+        - dedup_key
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: For every host-output combo, only allow one message per 5 minutes
+  - id: suppress
+    filter: "true"
+    disabled: false
+    conf:
+      allow: 1
+      suppressPeriodSec: 300
+      dropEventsMode: true
+      maxCacheSize: 50000
+      cacheIdleTimeoutPeriods: 2
+      numEventsIdleTimeoutTrigger: 10000
+      keyExpr: dedup_key
+description: Filter through internal logs. If we see queuing happening, fire a PD trigger
+  event
