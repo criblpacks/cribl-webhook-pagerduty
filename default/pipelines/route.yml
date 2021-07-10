@@ -1,0 +1,21 @@
+id: default
+groups: {}
+routes:
+  - id: default
+    name: trigger_route
+    final: true
+    disabled: false
+    pipeline: trigger_pipe
+    description: ""
+    clones: []
+    filter: __inputId=='cribl:CriblMetrics'
+    output: default
+  - id: aKTej4
+    name: default
+    final: true
+    disabled: false
+    pipeline: drop_all
+    description: ""
+    clones: []
+    filter: "true"
+    output: default
